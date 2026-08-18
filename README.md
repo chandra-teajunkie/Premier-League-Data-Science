@@ -19,3 +19,11 @@ seasons = 2025
 ```
 
 The current ingestion captures competition metadata, teams, standings, matches, and top scorers. That is enough to start a first notebook for team-level and season-level analysis.
+
+## Python cell analysis
+
+The project uses `uv` for Python dependencies. The first-time setup is:
+
+```bash
+uv sync
+```
