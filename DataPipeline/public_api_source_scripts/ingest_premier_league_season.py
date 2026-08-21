@@ -89,6 +89,24 @@ def extract_teams(teams_payload: dict[str, Any]) -> list[dict[str, Any]]:
     ]
 
 
+def extract_squad(teams_payload: dict[str, Any]) -> list[dict[str, Any]]:
+    squad_rows = []
+    for team in teams_payload.get("teams", []):
+        for player in team.get("squad", []):
+            squad_rows.append(
+                {
+                    "team_id": team.get("id"),
+                    "team": team.get("name"),
+                    "player_id": player.get("id"),
+                    "player": player.get("name"),
+                    "position": player.get("position"),
+                    "dateOfBirth": player.get("dateOfBirth"),
+                    "nationality": player.get("nationality"),
+                }
+            )
+    return squad_rows
+
+
 def extract_standings(standings_payload: dict[str, Any]) -> list[dict[str, Any]]:
     standings = standings_payload.get("standings", [])
     table = standings[0].get("table", []) if standings else []
@@ -163,6 +181,7 @@ def ingest_season(token: str, competition_code: str, season: int, base_dir: Path
     write_json(bundle.raw_dir / "scorers.json", scorers)
 
     write_parquet(bundle.parquet_dir / "teams.parquet", extract_teams(teams))
+    write_parquet(bundle.parquet_dir / "squad.parquet", extract_squad(teams))
     write_parquet(bundle.parquet_dir / "standings.parquet", extract_standings(standings))
     write_parquet(bundle.parquet_dir / "matches.parquet", extract_matches(matches))
     write_parquet(bundle.parquet_dir / "scorers.parquet", extract_scorers(scorers))
@@ -178,7 +197,8 @@ def main() -> int:
     try:
         bundles = [ingest_season(token, INGEST_COMPETITION, season, INGEST_OUTPUT_DIR) for season in INGEST_SEASONS]
     except HTTPError as error:
-        raise SystemExit(f"HTTP error while calling the API: {error.code} {error.reason}") from error
+        response_body = error.read().decode("utf-8", errors="replace").strip()
+        raise SystemExit(f"HTTP error while calling the API: {error.code} {error.reason}. Response: {response_body}") from error
     except URLError as error:
         raise SystemExit(f"Network error while calling the API: {error.reason}") from error
 

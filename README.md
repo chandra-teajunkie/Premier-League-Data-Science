@@ -18,7 +18,7 @@ seasons = 2025
 # seasons = 2025,2024
 ```
 
-The current ingestion captures competition metadata, teams, standings, matches, and top scorers. That is enough to start a first notebook for team-level and season-level analysis.
+The current ingestion captures competition metadata, teams, squad player metadata, standings, matches, and top scorers. That is enough to start a first notebook for team-level and season-level analysis.
 
 ## Python cell analysis
 

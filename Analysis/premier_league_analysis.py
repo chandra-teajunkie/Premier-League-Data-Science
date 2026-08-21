@@ -13,16 +13,18 @@ RESULTS_DIR = Path(__file__).resolve().parent / "results"
 RESULTS_DIR.mkdir(exist_ok=True)
 
 teams = pd.read_parquet(DATA_DIR / "teams.parquet")
+squad = pd.read_parquet(DATA_DIR / "squad.parquet")
 standings = pd.read_parquet(DATA_DIR / "standings.parquet")
 matches = pd.read_parquet(DATA_DIR / "matches.parquet")
 scorers = pd.read_parquet(DATA_DIR / "scorers.parquet")
 
 print(f"Premier League {SEASON}/{str(SEASON + 1)[-2:]}")
-print({"teams": teams.shape, "standings": standings.shape, "matches": matches.shape, "scorers": scorers.shape})
+print({"teams": teams.shape, "squad": squad.shape, "standings": standings.shape, "matches": matches.shape, "scorers": scorers.shape})
 
 # %% Validate and clean data
 required_columns = {
     "teams": {"id", "name"},
+    "squad": {"team_id", "team", "player_id", "player", "position", "nationality"},
     "standings": {"position", "team", "points", "goalDifference"},
     "matches": {"id", "utcDate", "homeTeam", "awayTeam", "homeScore", "awayScore"},
     "scorers": {"player", "team", "goals"},
@@ -40,6 +42,7 @@ for column in ["position", "points", "goalDifference", "playedGames", "won", "dr
     if column in standings:
         standings[column] = pd.to_numeric(standings[column], errors="coerce")
 scorers["goals"] = pd.to_numeric(scorers["goals"], errors="coerce").fillna(0)
+squad["dateOfBirth"] = pd.to_datetime(squad["dateOfBirth"], errors="coerce")
 
 completed_matches = matches[
     matches["status"].eq("FINISHED")
@@ -50,10 +53,10 @@ completed_matches = matches[
 # %% Data quality
 quality_report = pd.DataFrame(
     {
-        "table": ["teams", "standings", "matches", "scorers"],
-        "rows": [len(teams), len(standings), len(matches), len(scorers)],
-        "duplicate_rows": [teams.duplicated().sum(), standings.duplicated().sum(), matches.duplicated().sum(), scorers.duplicated().sum()],
-        "missing_cells": [teams.isna().sum().sum(), standings.isna().sum().sum(), matches.isna().sum().sum(), scorers.isna().sum().sum()],
+        "table": ["teams", "squad", "standings", "matches", "scorers"],
+        "rows": [len(teams), len(squad), len(standings), len(matches), len(scorers)],
+        "duplicate_rows": [teams.duplicated().sum(), squad.duplicated().sum(), standings.duplicated().sum(), matches.duplicated().sum(), scorers.duplicated().sum()],
+        "missing_cells": [teams.isna().sum().sum(), squad.isna().sum().sum(), standings.isna().sum().sum(), matches.isna().sum().sum(), scorers.isna().sum().sum()],
     }
 )
 
@@ -106,6 +109,18 @@ long_results["result"] = long_results["points"].map({3: "W", 1: "D", 0: "L"})
 long_results["form_points"] = long_results.groupby("team")["points"].transform(lambda values: values.rolling(5, min_periods=1).sum())
 latest_form = long_results.groupby("team", as_index=False).tail(1).sort_values("form_points", ascending=False)
 print(latest_form[["team", "result", "form_points"]])
+
+# %% Squad analysis
+squad_by_team = (
+    squad.groupby("team", as_index=False)
+    .agg(squad_size=("player_id", "nunique"))
+    .sort_values("squad_size", ascending=False)
+)
+position_by_team = pd.crosstab(squad["team"], squad["position"]).reset_index()
+position_counts = squad["position"].value_counts(dropna=False).rename_axis("position").reset_index(name="players")
+
+print(squad_by_team)
+print(position_counts)
 
 # %% Scorers and descriptive statistics
 top_scorers = scorers.sort_values(["goals", "assists"], ascending=False).head(10)
@@ -164,11 +179,35 @@ home_away_figure = px.scatter(
 home_away_figure.update_traces(textposition="top center")
 home_away_figure.show()
 
+squad_size_figure = px.bar(
+    squad_by_team.sort_values("squad_size"),
+    x="squad_size",
+    y="team",
+    orientation="h",
+    color="squad_size",
+    color_continuous_scale="Viridis",
+    title="Squad size by team",
+    labels={"squad_size": "Players"},
+)
+squad_size_figure.show()
+
+position_figure = px.bar(
+    position_counts,
+    x="position",
+    y="players",
+    color="position",
+    title="Squad composition by position",
+    labels={"players": "Players", "position": "Position"},
+)
+position_figure.show()
+
 # %% Export analysis outputs
 quality_report.to_csv(RESULTS_DIR / f"season_{SEASON}_quality_report.csv", index=False)
 team_summary.to_parquet(RESULTS_DIR / f"season_{SEASON}_team_summary.parquet", index=False)
 latest_form.to_parquet(RESULTS_DIR / f"season_{SEASON}_latest_form.parquet", index=False)
 top_scorers.to_parquet(RESULTS_DIR / f"season_{SEASON}_top_scorers.parquet", index=False)
+squad.to_parquet(RESULTS_DIR / f"season_{SEASON}_squad.parquet", index=False)
+squad_by_team.to_parquet(RESULTS_DIR / f"season_{SEASON}_squad_by_team.parquet", index=False)
 monthly_goals.to_csv(RESULTS_DIR / f"season_{SEASON}_monthly_goals.csv")
 
 print(f"Analysis outputs written to {RESULTS_DIR}")
